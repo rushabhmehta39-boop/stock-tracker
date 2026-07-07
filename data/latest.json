@@ -1,0 +1,17 @@
+{
+  "date": "2026-07-07",
+  "bse_result_calendar": [],
+  "fo_oi_pcr": {},
+  "bulk_deals": [],
+  "block_deals": [],
+  "equity_rows": [],
+  "fetch_log": [
+    "[2026-07-07T08:01:27.888262] === Run started for 2026-07-07 ===",
+    "[2026-07-07T08:01:28.519030] BSE result calendar fetch FAILED: Expecting value: line 3 column 1 (char 4)",
+    "[2026-07-07T08:01:29.995082] NSE bhavcopy fetch FAILED (market may be closed / holiday / url format changed): 404 Client Error: Not Found for url: https://archives.nseindia.com/products/content/sec_bhavdata_full_07072026.csv",
+    "[2026-07-07T08:01:32.335742] F&O master list fetch FAILED: Error tokenizing data. C error: Expected 1 fields in line 18, saw 2\n",
+    "[2026-07-07T08:01:32.335761] F&O OI/PCR: fetched for 0 symbols",
+    "[2026-07-07T08:01:33.944508] Bulk deals fetch FAILED: Expecting value: line 2 column 1 (char 1)",
+    "[2026-07-07T08:01:34.418110] Block deals fetch FAILED: Expecting value: line 2 column 1 (char 1)"
+  ]
+}
