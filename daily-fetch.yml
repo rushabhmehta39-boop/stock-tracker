@@ -1,0 +1,36 @@
+name: Daily Stock Data Fetch
+
+on:
+  schedule:
+    # 18:30 UTC = 00:00 IST (midnight, India time)
+    - cron: "30 18 * * *"
+  workflow_dispatch: {}   # lets you also trigger it manually from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run fetch script
+        run: python scripts/fetch_data.py
+
+      - name: Commit and push updated data
+        run: |
+          git config user.name "stock-tracker-bot"
+          git config user.email "actions@github.com"
+          git add data/
+          git diff --quiet --cached || git commit -m "Daily data update $(date -u +'%Y-%m-%d')"
+          git push

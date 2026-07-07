@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pre-Position Watch — Daily Stock Signal Board</title>
+<style>
+  :root {
+    --bg: #0b0e11;
+    --panel: #12161b;
+    --line: #232932;
+    --text: #e8eaed;
+    --dim: #8b95a1;
+    --green: #16c784;
+    --red: #ff4d5e;
+    --amber: #ffb300;
+    --mono: 'JetBrains Mono', 'Roboto Mono', monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  header h1 {
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    margin: 0;
+    font-weight: 700;
+  }
+  header h1 span { color: var(--amber); }
+  .meta {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+  }
+  main {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 28px 32px 80px;
+  }
+  section { margin-bottom: 40px; }
+  section h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    font-weight: 600;
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  section h2::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    color: var(--dim);
+    font-weight: 500;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #1a1f26;
+  }
+  tr:hover td { background: #151a20; }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+  .badge {
+    display: inline-block;
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 3px;
+    background: rgba(255,179,0,0.15);
+    color: var(--amber);
+    letter-spacing: 0.03em;
+  }
+  .empty {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--dim);
+    padding: 20px 12px;
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+  }
+  .card-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin-bottom: 12px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .card .num {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 600;
+  }
+  .card .label {
+    font-size: 11px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 4px;
+  }
+  footer {
+    text-align: center;
+    font-size: 11px;
+    color: var(--dim);
+    padding: 20px;
+    font-family: var(--mono);
+  }
+  a { color: var(--amber); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pre-Position <span>Watch</span></h1>
+  <div class="meta" id="lastUpdated">loading data…</div>
+</header>
+
+<main>
+
+  <div class="card-row" id="summaryCards"></div>
+
+  <section>
+    <h2>Flagged for pre-positioning</h2>
+    <div id="flaggedTable"></div>
+  </section>
+
+  <section>
+    <h2>Upcoming results — BSE calendar</h2>
+    <div id="calendarTable"></div>
+  </section>
+
+  <section>
+    <h2>Volume &amp; delivery movers</h2>
+    <div id="equityTable"></div>
+  </section>
+
+  <section>
+    <h2>F&amp;O open interest &amp; PCR</h2>
+    <div id="foTable"></div>
+  </section>
+
+  <section>
+    <h2>Bulk &amp; block deals</h2>
+    <div id="dealsTable"></div>
+  </section>
+
+</main>
+
+<footer>
+  Data refreshes automatically once daily via GitHub Actions. Informational only — not investment advice.
+</footer>
+
+<script>
+async function loadData() {
+  try {
+    const res = await fetch('data/latest.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error('no data yet');
+    const data = await res.json();
+    render(data);
+  } catch (e) {
+    document.getElementById('lastUpdated').textContent = 'No data yet — waiting for first automated run';
+    document.getElementById('flaggedTable').innerHTML = emptyMsg('The first scheduled run hasn\'t completed yet, or you can trigger one manually from the Actions tab.');
+  }
+}
+
+function emptyMsg(msg) {
+  return `<div class="empty">${msg}</div>`;
+}
+
+function fmtNum(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return Number(n).toLocaleString('en-IN');
+}
+
+function render(data) {
+  document.getElementById('lastUpdated').textContent = `Last updated: ${data.date}`;
+
+  const equity = data.equity_rows || [];
+  const fo = data.fo_oi_pcr || {};
+  const bulk = data.bulk_deals || [];
+  const block = data.block_deals || [];
+  const calendar = data.bse_result_calendar || [];
+
+  // --- Summary cards ---
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="card"><div class="num">${equity.length}</div><div class="label">Equities tracked</div></div>
+    <div class="card"><div class="num">${Object.keys(fo).length}</div><div class="label">F&amp;O symbols scanned</div></div>
+    <div class="card"><div class="num">${bulk.length + block.length}</div><div class="label">Bulk/Block deals today</div></div>
+    <div class="card"><div class="num">${calendar.length}</div><div class="label">Results in next 14 days</div></div>
+  `;
+
+  // --- Flagged watchlist: symbols with delivery% spike AND appear in bulk/block/FO extremes ---
+  const dealSymbols = new Set([...bulk, ...block].map(d => (d.symbol || d.SYMBOL || '').toUpperCase()));
+  const flagged = equity
+    .filter(r => {
+      const delivPct = parseFloat(r[' DELIV_PER'] ?? r['DELIV_PER'] ?? r['% DLY QT TO TRADED QTY'] ?? 0);
+      const sym = (r['SYMBOL'] ?? r[' SYMBOL'] ?? '').toString().trim().toUpperCase();
+      const hasDeal = dealSymbols.has(sym);
+      const hasFO = fo[sym] && (fo[sym].pcr > 1.5 || fo[sym].pcr < 0.5);
+      return (delivPct > 70) || hasDeal || hasFO;
+    })
+    .slice(0, 25);
+
+  document.getElementById('flaggedTable').innerHTML = flagged.length ? tableFromRows(flagged, dealSymbols, fo) : emptyMsg('No stocks met the flagging criteria today (high delivery %, bulk/block deal, or extreme PCR).');
+
+  // --- Calendar ---
+  document.getElementById('calendarTable').innerHTML = calendar.length ? `
+    <table><thead><tr><th>Company</th><th>Meeting Date</th><th>Purpose</th></tr></thead>
+    <tbody>${calendar.slice(0, 40).map(c => `
+      <tr><td>${c.SLONGNAME || c.CompanyName || c.SCRIP_NAME || '—'}</td>
+      <td>${c.MEETING_DT || c.Meeting_Date || '—'}</td>
+      <td>${c.PURPOSE || c.Purpose || '—'}</td></tr>`).join('')}
+    </tbody></table>` : emptyMsg('No calendar data fetched yet, or endpoint format changed — check fetch_log in latest.json.');
+
+  // --- Equity movers ---
+  document.getElementById('equityTable').innerHTML = equity.length ? `
+    <table><thead><tr><th>Symbol</th><th>Close</th><th>Volume</th><th>Delivery %</th></tr></thead>
+    <tbody>${equity.slice(0, 40).map(r => `
+      <tr><td>${r['SYMBOL'] ?? r[' SYMBOL'] ?? '—'}</td>
+      <td>${fmtNum(r['CLOSE_PRICE'] ?? r[' CLOSE_PRICE'])}</td>
+      <td>${fmtNum(r['TTL_TRD_QNTY'] ?? r[' TTL_TRD_QNTY'])}</td>
+      <td>${r[' DELIV_PER'] ?? r['DELIV_PER'] ?? '—'}</td></tr>`).join('')}
+    </tbody></table>` : emptyMsg('No equity bhavcopy data yet.');
+
+  // --- F&O ---
+  const foRows = Object.entries(fo);
+  document.getElementById('foTable').innerHTML = foRows.length ? `
+    <table><thead><tr><th>Symbol</th><th>Call OI</th><th>Put OI</th><th>PCR</th></tr></thead>
+    <tbody>${foRows.slice(0, 40).map(([sym, v]) => `
+      <tr><td>${sym}</td><td>${fmtNum(v.call_oi)}</td><td>${fmtNum(v.put_oi)}</td>
+      <td class="${v.pcr > 1 ? 'pos' : 'neg'}">${v.pcr ?? '—'}</td></tr>`).join('')}
+    </tbody></table>` : emptyMsg('No F&O OI data yet.');
+
+  // --- Deals ---
+  const allDeals = [...bulk.map(d => ({...d, kind: 'Bulk'})), ...block.map(d => ({...d, kind: 'Block'}))];
+  document.getElementById('dealsTable').innerHTML = allDeals.length ? `
+    <table><thead><tr><th>Type</th><th>Symbol</th><th>Client</th><th>Buy/Sell</th><th>Qty</th><th>Price</th></tr></thead>
+    <tbody>${allDeals.slice(0, 40).map(d => `
+      <tr><td><span class="badge">${d.kind}</span></td>
+      <td>${d.symbol || d.SYMBOL || '—'}</td>
+      <td>${d.clientName || d.CLIENT_NAME || '—'}</td>
+      <td>${d.buySell || d.BUY_SELL || '—'}</td>
+      <td>${fmtNum(d.quantityTraded || d.QUANTITY_TRADED)}</td>
+      <td>${fmtNum(d.tradePrice || d.TRADE_PRICE)}</td></tr>`).join('')}
+    </tbody></table>` : emptyMsg('No bulk/block deals reported for this date.');
+}
+
+function tableFromRows(rows, dealSymbols, fo) {
+  return `<table><thead><tr><th>Symbol</th><th>Close</th><th>Delivery %</th><th>Signal</th></tr></thead>
+  <tbody>${rows.map(r => {
+    const sym = (r['SYMBOL'] ?? r[' SYMBOL'] ?? '').toString().trim().toUpperCase();
+    const signals = [];
+    const delivPct = parseFloat(r[' DELIV_PER'] ?? r['DELIV_PER'] ?? 0);
+    if (delivPct > 70) signals.push('High Delivery');
+    if (dealSymbols.has(sym)) signals.push('Bulk/Block Deal');
+    if (fo[sym] && (fo[sym].pcr > 1.5 || fo[sym].pcr < 0.5)) signals.push('Extreme PCR');
+    return `<tr><td>${sym}</td><td>${fmtNum(r['CLOSE_PRICE'] ?? r[' CLOSE_PRICE'])}</td>
+    <td>${delivPct || '—'}</td>
+    <td>${signals.map(s => `<span class="badge">${s}</span>`).join(' ')}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+loadData();
+</script>
+
+</body>
+</html>
