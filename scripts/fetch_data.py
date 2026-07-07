@@ -34,6 +34,13 @@ TODAY_STR = now_ist.strftime("%Y-%m-%d")
 TODAY_COMPACT = now_ist.strftime("%d%m%Y")     # DDMMYYYY for NSE bhavcopy urls
 TODAY_YMD = now_ist.strftime("%Y%m%d")         # YYYYMMDD
 
+# The script runs at midnight IST, i.e. right at the start of a new day.
+# The most recent COMPLETE trading session is therefore "yesterday" (or
+# further back over a weekend/holiday) -- NOT today, since today's market
+# hasn't opened yet. We try the last several calendar days, most recent
+# first, and use whichever one NSE actually has bhavcopy data for.
+CANDIDATE_DATES = [now_ist - timedelta(days=d) for d in range(1, 6)]
+
 log_lines = []
 
 
@@ -86,7 +93,8 @@ def fetch_bse_result_calendar():
             "Chrome/124.0.0.0 Safari/537.36"
         ),
         "Referer": "https://www.bseindia.com/corporates/Forth_Results.aspx",
-        "Accept": "application/json",
+        "Origin": "https://www.bseindia.com",
+        "Accept": "application/json, text/plain, */*",
     }
     params = {
         "scripcode": "",
@@ -96,8 +104,18 @@ def fetch_bse_result_calendar():
         "strTo": (now_ist + timedelta(days=14)).strftime("%Y%m%d"),
     }
     try:
-        r = requests.get(url, headers=headers, params=params, timeout=15)
+        # warm up cookies against the BSE site first, same trick as NSE
+        s = requests.Session()
+        s.headers.update(headers)
+        s.get("https://www.bseindia.com/corporates/Forth_Results.aspx", timeout=10)
+        time.sleep(1)
+        r = s.get(url, params=params, timeout=15)
         r.raise_for_status()
+        content_type = r.headers.get("Content-Type", "")
+        if "json" not in content_type:
+            log(f"BSE result calendar fetch FAILED: response wasn't JSON (got {content_type}); "
+                f"BSE likely served a block/challenge page instead of data")
+            return []
         data = r.json()
         if isinstance(data, dict) and "Table" in data:
             rows = data["Table"]
@@ -120,19 +138,33 @@ def fetch_nse_bhavcopy():
     NSE 'security-wise delivery position' full bhavcopy contains
     close price, traded qty, and delivery qty/% for every symbol.
     URL pattern: sec_bhavdata_full_DDMMYYYY.csv
+
+    Since this script runs at midnight (start of a new day), today's
+    session hasn't happened yet -- we walk backwards over the last few
+    calendar days (skipping weekends automatically) until we find the
+    most recent trading day that has data.
     """
-    url = f"https://archives.nseindia.com/products/content/sec_bhavdata_full_{TODAY_COMPACT}.csv"
     s = nse_session()
-    try:
-        r = s.get(url, timeout=20)
-        r.raise_for_status()
-        df = pd.read_csv(io.StringIO(r.text))
-        df.columns = [c.strip() for c in df.columns]
-        log(f"NSE bhavcopy: {len(df)} rows fetched")
-        return df
-    except Exception as e:
-        log(f"NSE bhavcopy fetch FAILED (market may be closed / holiday / url format changed): {e}")
-        return pd.DataFrame()
+    for candidate in CANDIDATE_DATES:
+        if candidate.weekday() >= 5:  # Sat=5, Sun=6 -- no trading, skip without wasting a request
+            continue
+        date_compact = candidate.strftime("%d%m%Y")
+        url = f"https://archives.nseindia.com/products/content/sec_bhavdata_full_{date_compact}.csv"
+        try:
+            r = s.get(url, timeout=20)
+            if r.status_code == 404:
+                log(f"NSE bhavcopy: no file for {candidate.strftime('%Y-%m-%d')} (likely holiday), trying earlier date")
+                continue
+            r.raise_for_status()
+            df = pd.read_csv(io.StringIO(r.text))
+            df.columns = [c.strip() for c in df.columns]
+            log(f"NSE bhavcopy: {len(df)} rows fetched for {candidate.strftime('%Y-%m-%d')}")
+            return df
+        except Exception as e:
+            log(f"NSE bhavcopy fetch FAILED for {candidate.strftime('%Y-%m-%d')}: {e}")
+            continue
+    log("NSE bhavcopy: no data found in the last 5 candidate days")
+    return pd.DataFrame()
 
 
 # ---------------------------------------------------------------------------
@@ -147,17 +179,27 @@ def fetch_nse_fo_oi():
     """
     s = nse_session()
     result = {}
+    symbols = []
     try:
-        master_url = "https://archives.nseindia.com/content/fo/fo_mktlots.csv"
-        r = s.get(master_url, timeout=15)
+        # NSE's underlying-information JSON API is more stable than the
+        # old fo_mktlots.csv, which has irregular formatting that breaks
+        # standard CSV parsing.
+        master_url = "https://www.nseindia.com/api/underlying-information"
+        r = s.get(master_url, timeout=15, headers={"Accept": "application/json"})
         r.raise_for_status()
-        df = pd.read_csv(io.StringIO(r.text))
-        symbol_col = df.columns[1] if len(df.columns) > 1 else df.columns[0]
-        symbols = [str(x).strip() for x in df[symbol_col].dropna().unique() if str(x).strip().isupper()]
+        data = r.json()
+        stock_list = data.get("data", {}).get("UnderlyingList", [])
+        symbols = [item["symbol"].strip() for item in stock_list if item.get("symbol")]
         log(f"F&O symbol master list: {len(symbols)} symbols")
     except Exception as e:
         log(f"F&O master list fetch FAILED: {e}")
-        symbols = []
+        # Fallback: a short hardcoded list of major, near-certain F&O names,
+        # so the OI/PCR section still has something rather than nothing.
+        symbols = [
+            "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN",
+            "ITC", "LT", "AXISBANK", "BAJFINANCE", "KOTAKBANK", "HINDUNILVR",
+        ]
+        log(f"F&O symbol list: using {len(symbols)} fallback symbols instead")
 
     # Limit per-run to avoid long execution / rate limiting; sample a batch each day if list is huge
     MAX_SYMBOLS = 60
@@ -195,6 +237,13 @@ def fetch_nse_fo_oi():
 # ---------------------------------------------------------------------------
 def fetch_bulk_block_deals():
     s = nse_session()
+    # NSE's data APIs check the Referer against real page paths and want
+    # an explicit Accept header, otherwise they serve an HTML challenge
+    # page instead of the JSON we expect.
+    s.headers.update({
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://www.nseindia.com/report-detail/display-bulk-and-block-deals",
+    })
     out = {"bulk": [], "block": []}
     for kind, url in [
         ("bulk", "https://www.nseindia.com/api/historical/bulk-deals"),
@@ -203,6 +252,11 @@ def fetch_bulk_block_deals():
         try:
             r = s.get(url, timeout=15)
             r.raise_for_status()
+            content_type = r.headers.get("Content-Type", "")
+            if "json" not in content_type:
+                log(f"{kind.capitalize()} deals fetch FAILED: response wasn't JSON "
+                    f"(got {content_type}) -- likely blocked by NSE's bot protection")
+                continue
             data = r.json()
             rows = data.get("data", []) if isinstance(data, dict) else data
             out[kind] = rows
