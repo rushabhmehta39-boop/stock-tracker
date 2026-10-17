@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-17",
+  "date": "2026-10-18",
   "bse_result_calendar": [],
   "fo_oi_pcr": {
     "360ONE": {
@@ -59995,12 +59995,12 @@
     }
   ],
   "fetch_log": [
-    "[2026-10-16T21:27:42.147231] === Run started for 2026-10-17 ===",
-    "[2026-10-16T21:27:43.965768] BSE result calendar fetch FAILED: 403 Client Error: Forbidden for url: https://api.bseindia.com/BseIndiaAPI/api/AnnBoardMeeting/w?scripcode=&strSearch=R&strType=F&strFrom=20261017&strTo=20261031",
-    "[2026-10-16T21:27:46.375797] NSE bhavcopy: 3511 rows fetched for 2026-10-16",
-    "[2026-10-16T21:27:48.044232] F&O symbol master list: 213 symbols",
-    "[2026-10-16T21:28:41.324453] F&O OI/PCR: fetched for 60 symbols",
-    "[2026-10-16T21:28:43.252766] Bulk deals fetch FAILED: response wasn't JSON (got text/html) -- likely blocked by NSE's bot protection",
-    "[2026-10-16T21:28:43.641470] Block deals fetch FAILED: response wasn't JSON (got text/html) -- likely blocked by NSE's bot protection"
+    "[2026-10-17T20:46:31.812612] === Run started for 2026-10-18 ===",
+    "[2026-10-17T20:46:33.520352] BSE result calendar fetch FAILED: 403 Client Error: Forbidden for url: https://api.bseindia.com/BseIndiaAPI/api/AnnBoardMeeting/w?scripcode=&strSearch=R&strType=F&strFrom=20261018&strTo=20261101",
+    "[2026-10-17T20:46:35.336622] NSE bhavcopy: 3511 rows fetched for 2026-10-16",
+    "[2026-10-17T20:46:36.815042] F&O symbol master list: 213 symbols",
+    "[2026-10-17T20:47:24.209444] F&O OI/PCR: fetched for 60 symbols",
+    "[2026-10-17T20:47:27.928870] Bulk deals fetch FAILED: response wasn't JSON (got text/html) -- likely blocked by NSE's bot protection",
+    "[2026-10-17T20:47:28.240502] Block deals fetch FAILED: response wasn't JSON (got text/html) -- likely blocked by NSE's bot protection"
   ]
 }
